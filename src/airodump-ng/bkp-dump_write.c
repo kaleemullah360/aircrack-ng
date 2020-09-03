@@ -143,6 +143,163 @@ int dump_write_csv(struct AP_info * ap_1st,
 	fseek(opt.f_txt, 0, SEEK_SET);
 
 	fprintf(opt.f_txt,
+			"\r\nBSSID, First time seen, Last time seen, channel, Speed, "
+			"Privacy, Cipher, Authentication, Power, # beacons, # IV, LAN IP, "
+			"ID-length, ESSID, Key\r\n");
+
+	ap_cur = ap_1st;
+
+	while (ap_cur != NULL)
+	{
+		if (memcmp(ap_cur->bssid, BROADCAST, 6) == 0)
+		{
+			ap_cur = ap_cur->next;
+			continue;
+		}
+
+		if (ap_cur->security != 0 && f_encrypt != 0
+			&& ((ap_cur->security & f_encrypt) == 0))
+		{
+			ap_cur = ap_cur->next;
+			continue;
+		}
+
+		if (is_filtered_essid(ap_cur->essid))
+		{
+			ap_cur = ap_cur->next;
+			continue;
+		}
+
+		fprintf(opt.f_txt,
+				"%02X:%02X:%02X:%02X:%02X:%02X, ",
+				ap_cur->bssid[0],
+				ap_cur->bssid[1],
+				ap_cur->bssid[2],
+				ap_cur->bssid[3],
+				ap_cur->bssid[4],
+				ap_cur->bssid[5]);
+
+		ltime = localtime(&ap_cur->tinit);
+
+		fprintf(opt.f_txt,
+				"%04d-%02d-%02d %02d:%02d:%02d, ",
+				1900 + ltime->tm_year,
+				1 + ltime->tm_mon,
+				ltime->tm_mday,
+				ltime->tm_hour,
+				ltime->tm_min,
+				ltime->tm_sec);
+
+		ltime = localtime(&ap_cur->tlast);
+
+		fprintf(opt.f_txt,
+				"%04d-%02d-%02d %02d:%02d:%02d, ",
+				1900 + ltime->tm_year,
+				1 + ltime->tm_mon,
+				ltime->tm_mday,
+				ltime->tm_hour,
+				ltime->tm_min,
+				ltime->tm_sec);
+
+		fprintf(opt.f_txt, "%2d, %3d,", ap_cur->channel, ap_cur->max_speed);
+
+		if ((ap_cur->security
+			 & (STD_OPN | STD_WEP | STD_WPA | STD_WPA2 | AUTH_SAE | AUTH_OWE))
+			== 0)
+			fprintf(opt.f_txt, " ");
+		else
+		{
+			if (ap_cur->security & STD_WPA2)
+			{
+				if (ap_cur->security & AUTH_SAE || ap_cur->security & AUTH_OWE)
+					fprintf(opt.f_txt, " WPA3");
+				fprintf(opt.f_txt, " WPA2");
+			}
+			if (ap_cur->security & STD_WPA) fprintf(opt.f_txt, " WPA");
+			if (ap_cur->security & STD_WEP) fprintf(opt.f_txt, " WEP");
+			if (ap_cur->security & STD_OPN) fprintf(opt.f_txt, " OPN");
+		}
+
+		fprintf(opt.f_txt, ",");
+
+		if ((ap_cur->security & ENC_FIELD) == 0)
+			fprintf(opt.f_txt, " ");
+		else
+		{
+			if (ap_cur->security & ENC_CCMP) fprintf(opt.f_txt, " CCMP");
+			if (ap_cur->security & ENC_WRAP) fprintf(opt.f_txt, " WRAP");
+			if (ap_cur->security & ENC_TKIP) fprintf(opt.f_txt, " TKIP");
+			if (ap_cur->security & ENC_WEP104) fprintf(opt.f_txt, " WEP104");
+			if (ap_cur->security & ENC_WEP40) fprintf(opt.f_txt, " WEP40");
+			if (ap_cur->security & ENC_WEP) fprintf(opt.f_txt, " WEP");
+			if (ap_cur->security & ENC_GCMP) fprintf(opt.f_txt, " GCMP");
+			if (ap_cur->security & ENC_GMAC) fprintf(opt.f_txt, " GMAC");
+		}
+
+		fprintf(opt.f_txt, ",");
+
+		if ((ap_cur->security & AUTH_FIELD) == 0)
+			fprintf(opt.f_txt, "   ");
+		else
+		{
+			if (ap_cur->security & AUTH_SAE) fprintf(opt.f_txt, " SAE");
+			if (ap_cur->security & AUTH_MGT) fprintf(opt.f_txt, " MGT");
+			if (ap_cur->security & AUTH_CMAC) fprintf(opt.f_txt, " CMAC");
+			if (ap_cur->security & AUTH_PSK)
+			{
+				if (ap_cur->security & STD_WEP)
+					fprintf(opt.f_txt, " SKA");
+				else
+					fprintf(opt.f_txt, " PSK");
+			}
+			if (ap_cur->security & AUTH_OWE) fprintf(opt.f_txt, " OWE");
+			if (ap_cur->security & AUTH_OPN) fprintf(opt.f_txt, " OPN");
+		}
+
+		fprintf(opt.f_txt,
+				", %3d, %8lu, %8lu, ",
+				ap_cur->avg_power,
+				ap_cur->nb_bcn,
+				ap_cur->nb_data);
+
+		fprintf(opt.f_txt,
+				"%3d.%3d.%3d.%3d, ",
+				ap_cur->lanip[0],
+				ap_cur->lanip[1],
+				ap_cur->lanip[2],
+				ap_cur->lanip[3]);
+
+		fprintf(opt.f_txt, "%3d, ", ap_cur->ssid_length);
+
+		if (verifyssid(ap_cur->essid))
+			fprintf(opt.f_txt, "%s, ", ap_cur->essid);
+		else
+		{
+			temp = format_text_for_csv(ap_cur->essid,
+									   (size_t) ap_cur->ssid_length);
+			if (temp != NULL) //-V547
+			{
+				fprintf(opt.f_txt, "%s, ", temp);
+				free(temp);
+			}
+		}
+
+		if (ap_cur->key != NULL)
+		{
+			for (i = 0; i < (int) strlen(ap_cur->key); i++)
+			{
+				fprintf(opt.f_txt, "%02X", ap_cur->key[i]);
+				if (i < (int) (strlen(ap_cur->key) - 1))
+					fprintf(opt.f_txt, ":");
+			}
+		}
+
+		fprintf(opt.f_txt, "\r\n");
+
+		ap_cur = ap_cur->next;
+	}
+
+	fprintf(opt.f_txt,
 			"\r\nStation MAC, First time seen, Last time seen, "
 			"Power, # packets, BSSID, Probed ESSIDs\r\n");
 
